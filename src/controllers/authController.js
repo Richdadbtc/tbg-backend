@@ -383,3 +383,71 @@ exports.changePassword = async (req, res) => {
     });
   }
 };
+
+
+// Google Sign In
+exports.googleSignIn = async (req, res) => {
+  try {
+    const { email, name, googleId, profilePicture } = req.body;
+
+    // Validate required fields
+    if (!email || !name || !googleId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email, name, and Google ID are required'
+      });
+    }
+
+    // Check if user exists
+    let user = await User.findOne({ email });
+    
+    if (user) {
+      // User exists, update Google ID if not set
+      if (!user.googleId) {
+        user.googleId = googleId;
+        user.authProvider = 'google';
+        if (profilePicture) user.profilePicture = profilePicture;
+        await user.save();
+      }
+    } else {
+      // Create new user
+      user = new User({
+        email,
+        name,
+        googleId,
+        authProvider: 'google',
+        profilePicture: profilePicture || null,
+        isVerified: true // Google users are automatically verified
+      });
+      
+      // Generate referral code
+      user.generateReferralCode();
+      await user.save();
+    }
+
+    // Update last login
+    user.lastLogin = new Date();
+    await user.save();
+
+    // Generate token
+    const token = generateToken(user._id);
+
+    // Remove sensitive fields from response
+    const userResponse = user.toObject();
+    delete userResponse.password;
+    delete userResponse.googleId;
+
+    res.json({
+      success: true,
+      message: 'Google sign-in successful',
+      token,
+      user: userResponse
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};

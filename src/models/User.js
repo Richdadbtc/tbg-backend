@@ -14,8 +14,24 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: true,
+    required: function() {
+      return !this.googleId && !this.facebookId;
+    },
     minlength: 6
+  },
+  // Add social login fields
+  googleId: {
+    type: String,
+    default: null
+  },
+  facebookId: {
+    type: String,
+    default: null
+  },
+  authProvider: {
+    type: String,
+    enum: ['local', 'google', 'facebook'],
+    default: 'local'
   },
   profilePicture: {
     type: String,
@@ -72,15 +88,16 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Hash password before saving
+// Hash password before saving (only if password exists)
 userSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
+  if (!this.isModified('password') || !this.password) return next();
   this.password = await bcrypt.hash(this.password, 12);
   next();
 });
 
 // Compare password method
 userSchema.methods.comparePassword = async function(password) {
+  if (!this.password) return false; // No password for social login users
   return await bcrypt.compare(password, this.password);
 };
 
