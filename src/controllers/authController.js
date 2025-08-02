@@ -59,13 +59,14 @@ exports.register = async (req, res) => {
       }
     }
 
-    // Create user
+    // Create user but mark as unverified
     const user = new User({
       email,
       name,
       password,
-      phoneNumber: phone_number, // ✅ Map phone_number to phoneNumber
-      referredBy
+      phoneNumber: phone_number,
+      referredBy,
+      isVerified: false // Add this field to require email verification
     });
 
     // Generate referral code
@@ -73,18 +74,46 @@ exports.register = async (req, res) => {
 
     await user.save();
 
-    // Generate token
-    const token = generateToken(user._id);
+    // Generate and send OTP for email verification
+    const otp = generateOTP(email);
+    
+    try {
+      await sendEmail({
+        to: email,
+        subject: 'Verify Your Email - TBG Registration',
+        text: `Welcome to TBG! Your email verification OTP is: ${otp}. This OTP will expire in 10 minutes.`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #333;">Welcome to TBG!</h2>
+            <p>Hi ${name},</p>
+            <p>Thank you for registering with The Brain Gig! To complete your registration, please verify your email address.</p>
+            <div style="background-color: #f5f5f5; padding: 20px; text-align: center; margin: 20px 0;">
+              <h3 style="color: #333; margin: 0;">Your Verification Code</h3>
+              <h1 style="color: #007bff; font-size: 32px; margin: 10px 0; letter-spacing: 5px;">${otp}</h1>
+            </div>
+            <p>This code will expire in 10 minutes.</p>
+            <p>If you didn't create an account with us, please ignore this email.</p>
+            <p>Happy quizzing!</p>
+            <p>The TBG Team</p>
+          </div>
+        `
+      });
+    } catch (emailError) {
+      console.error('Failed to send verification email:', emailError);
+      // Delete the user if email sending fails
+      await User.findByIdAndDelete(user._id);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to send verification email. Please try again.'
+      });
+    }
 
-    // Remove password from response
-    const userResponse = user.toObject();
-    delete userResponse.password;
-
+    // Don't return token yet - user needs to verify email first
     res.status(201).json({
       success: true,
-      message: 'User registered successfully',
-      token,
-      user: userResponse
+      message: 'Registration successful! Please check your email for verification code.',
+      requiresVerification: true,
+      email: email
     });
   } catch (error) {
     console.error('Registration error:', error);
@@ -215,9 +244,31 @@ exports.verifyOtp = async (req, res) => {
       });
     }
 
+    // Find the user and mark as verified
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Mark user as verified
+    user.isVerified = true;
+    await user.save();
+
+    // Generate token after successful verification
+    const token = generateToken(user._id);
+
+    // Remove password from response
+    const userResponse = user.toObject();
+    delete userResponse.password;
+
     res.json({
       success: true,
-      message: 'OTP verified successfully'
+      message: 'Email verified successfully! Registration completed.',
+      token,
+      user: userResponse
     });
   } catch (error) {
     res.status(500).json({
