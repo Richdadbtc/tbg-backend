@@ -232,19 +232,23 @@ exports.forgotPassword = async (req, res) => {
 };
 
 // Verify OTP
-exports.verifyOtp = async (req, res) => {
+// Fix the verifyOTP function export
+// Remove this problematic line (around line 368):
+// exports.verifyOTP = exports.verifyOtp;
+
+// Keep only the proper verifyOTP function definition (around line 236):
+exports.verifyOTP = async (req, res) => {
   try {
     const { email, otp } = req.body;
 
-    const isValid = verifyOTP(email, otp);
-    if (!isValid) {
+    if (!email || !otp) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid or expired OTP'
+        message: 'Email and OTP are required'
       });
     }
 
-    // Find the user and mark as verified
+    // Find user by email
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(404).json({
@@ -253,28 +257,47 @@ exports.verifyOtp = async (req, res) => {
       });
     }
 
-    // Mark user as verified
+    // Check if OTP is valid and not expired
+    if (!user.otp || user.otp !== otp) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid OTP'
+      });
+    }
+
+    if (user.otpExpires < Date.now()) {
+      return res.status(400).json({
+        success: false,
+        message: 'OTP has expired'
+      });
+    }
+
+    // Mark user as verified and clear OTP
     user.isVerified = true;
+    user.otp = undefined;
+    user.otpExpires = undefined;
     await user.save();
 
-    // Generate token after successful verification
+    // Generate token
     const token = generateToken(user._id);
 
     // Remove password from response
     const userResponse = user.toObject();
     delete userResponse.password;
+    delete userResponse.otp;
+    delete userResponse.otpExpires;
 
-    res.json({
+    res.status(200).json({
       success: true,
-      message: 'Email verified successfully! Registration completed.',
+      message: 'OTP verified successfully',
       token,
       user: userResponse
     });
   } catch (error) {
+    console.error('Verify OTP error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error',
-      error: error.message
+      message: 'Server error during OTP verification'
     });
   }
 };
@@ -345,8 +368,7 @@ exports.resendOTP = async (req, res) => {
   }
 };
 
-// Fix the naming mismatch
-exports.verifyOTP = exports.verifyOtp;
+
 
 // Refresh token
 exports.refreshToken = async (req, res) => {

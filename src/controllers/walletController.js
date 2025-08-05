@@ -3,26 +3,8 @@ const Transaction = require('../models/Transaction');
 const { initiatePaystackTransfer } = require('../services/paymentService');
 const { sendNotification } = require('../services/notificationService');
 
-// Get wallet balance
-exports.getWalletBalance = async (req, res) => {
-  try {
-    const user = await User.findById(req.user._id).select('earnings points');
-    
-    res.json({
-      success: true,
-      wallet: {
-        balance: user.earnings,
-        points: user.points
-      }
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Server error',
-      error: error.message
-    });
-  }
-};
+// Remove the duplicate getWalletBalance function here
+// Keep only the one at the end of the file
 
 // Get transaction history
 exports.getTransactionHistory = async (req, res) => {

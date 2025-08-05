@@ -1,7 +1,8 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
-module.exports = async (req, res, next) => {
+// Protect middleware - authenticate user
+exports.protect = async (req, res, next) => {
   try {
     const token = req.header('Authorization')?.replace('Bearer ', '');
     
@@ -28,6 +29,25 @@ module.exports = async (req, res, next) => {
     res.status(401).json({
       success: false,
       message: 'Token is not valid'
+    });
+  }
+};
+
+// Admin middleware - check if user is admin
+exports.admin = async (req, res, next) => {
+  try {
+    if (req.user && req.user.role === 'admin') {
+      next();
+    } else {
+      res.status(403).json({
+        success: false,
+        message: 'Access denied. Admin role required.'
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Server error in admin middleware'
     });
   }
 };

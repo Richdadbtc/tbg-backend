@@ -1,11 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const quizController = require('../controllers/quizController');
-const auth = require('../middleware/auth');
-const admin = require('../middleware/admin'); // Add this line
+const { protect, admin } = require('../middleware/auth');
+// Remove: const admin = require('../middleware/admin'); // This line is redundant
 
 // Quiz routes (all protected)
-router.use(auth);
+router.use(protect);
 
 // Get quiz questions
 router.get('/questions', quizController.getQuestions);
