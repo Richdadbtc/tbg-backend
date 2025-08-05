@@ -45,6 +45,11 @@ const userSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  // Add TBG coin balance
+  tbgCoins: {
+    type: Number,
+    default: 0
+  },
   referralCode: {
     type: String,
     unique: true,
@@ -61,7 +66,9 @@ const userSchema = new mongoose.Schema({
   },
   phoneNumber: {
     type: String,
-    default: null
+    default: null,
+    unique: true,
+    sparse: true
   },
   fcmToken: {
     type: String,
