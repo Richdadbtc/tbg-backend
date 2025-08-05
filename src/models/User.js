@@ -90,7 +90,10 @@ const userSchema = new mongoose.Schema({
   resetPasswordToken: String,
   resetPasswordExpire: Date,
   emailVerificationToken: String,
-  emailVerificationExpire: Date
+  emailVerificationExpire: Date,
+  // Add OTP fields
+  otp: String,
+  otpExpires: Date
 }, {
   timestamps: true
 });

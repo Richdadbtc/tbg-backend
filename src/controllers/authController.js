@@ -232,11 +232,6 @@ exports.forgotPassword = async (req, res) => {
 };
 
 // Verify OTP
-// Fix the verifyOTP function export
-// Remove this problematic line (around line 368):
-// exports.verifyOTP = exports.verifyOtp;
-
-// Keep only the proper verifyOTP function definition (around line 236):
 exports.verifyOTP = async (req, res) => {
   try {
     const { email, otp } = req.body;
@@ -257,25 +252,17 @@ exports.verifyOTP = async (req, res) => {
       });
     }
 
-    // Check if OTP is valid and not expired
-    if (!user.otp || user.otp !== otp) {
+    // Use otpService to verify OTP instead of database fields
+    const isValidOTP = verifyOTP(email, otp);
+    if (!isValidOTP) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid OTP'
+        message: 'Invalid or expired OTP'
       });
     }
 
-    if (user.otpExpires < Date.now()) {
-      return res.status(400).json({
-        success: false,
-        message: 'OTP has expired'
-      });
-    }
-
-    // Mark user as verified and clear OTP
+    // Mark user as verified
     user.isVerified = true;
-    user.otp = undefined;
-    user.otpExpires = undefined;
     await user.save();
 
     // Generate token
@@ -284,8 +271,6 @@ exports.verifyOTP = async (req, res) => {
     // Remove password from response
     const userResponse = user.toObject();
     delete userResponse.password;
-    delete userResponse.otp;
-    delete userResponse.otpExpires;
 
     res.status(200).json({
       success: true,
