@@ -1,17 +1,93 @@
 const admin = require('firebase-admin');
 const Notification = require('../models/Notification');
-const User = require('../models/User');
 
-// Initialize Firebase Admin (add this to your main server file)
+// Initialize Firebase Admin (if not already done)
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert({
       projectId: process.env.FIREBASE_PROJECT_ID,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL
-    })
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+    }),
   });
 }
+
+// Send FCM notification
+exports.sendFCMNotification = async (fcmToken, title, body, data = {}) => {
+  try {
+    const message = {
+      notification: {
+        title,
+        body,
+      },
+      data: {
+        ...data,
+        timestamp: Date.now().toString(),
+      },
+      token: fcmToken,
+    };
+
+    const response = await admin.messaging().send(message);
+    console.log('Successfully sent message:', response);
+    return response;
+  } catch (error) {
+    console.error('Error sending message:', error);
+    throw error;
+  }
+};
+
+// Send notification to multiple users
+exports.sendBulkNotification = async (fcmTokens, title, body, data = {}) => {
+  try {
+    const message = {
+      notification: {
+        title,
+        body,
+      },
+      data: {
+        ...data,
+        timestamp: Date.now().toString(),
+      },
+      tokens: fcmTokens,
+    };
+
+    const response = await admin.messaging().sendMulticast(message);
+    console.log('Successfully sent bulk message:', response);
+    return response;
+  } catch (error) {
+    console.error('Error sending bulk message:', error);
+    throw error;
+  }
+};
+
+// Create and send notification
+exports.createAndSendNotification = async (userId, title, body, type, data = {}) => {
+  try {
+    // Create notification in database
+    const notification = new Notification({
+      userId,
+      title,
+      body,
+      type,
+      data,
+    });
+    await notification.save();
+
+    // Get user's FCM token
+    const User = require('../models/User');
+    const user = await User.findById(userId).select('fcmToken');
+    
+    if (user && user.fcmToken) {
+      await this.sendFCMNotification(user.fcmToken, title, body, data);
+    }
+
+    return notification;
+  } catch (error) {
+    console.error('Error creating and sending notification:', error);
+    throw error;
+  }
+};
+const User = require('../models/User');
 
 // Send notification to user
 exports.sendNotification = async (userId, notificationData) => {

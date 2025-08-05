@@ -221,3 +221,294 @@ exports.createAdmin = async (req, res) => {
     });
   }
 };
+
+// Create new quiz question
+exports.createQuizQuestion = async (req, res) => {
+  try {
+    const {
+      question,
+      options,
+      correctAnswerIndex,
+      category,
+      difficulty,
+      reward,
+      timeLimit
+    } = req.body;
+
+    const newQuestion = new Question({
+      question,
+      options,
+      correctAnswerIndex,
+      category,
+      difficulty,
+      reward,
+      timeLimit,
+      isActive: true
+    });
+
+    await newQuestion.save();
+
+    res.status(201).json({
+      success: true,
+      message: 'Quiz question created successfully',
+      question: newQuestion
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create quiz question',
+      error: error.message
+    });
+  }
+};
+
+// Get all quiz questions for admin
+exports.getAllQuizQuestions = async (req, res) => {
+  try {
+    const { page = 1, limit = 20, category, difficulty, isActive } = req.query;
+    
+    const query = {};
+    if (category) query.category = category;
+    if (difficulty) query.difficulty = difficulty;
+    if (isActive !== undefined) query.isActive = isActive === 'true';
+
+    const questions = await Question.find(query)
+      .sort({ createdAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
+
+    const total = await Question.countDocuments(query);
+
+    res.json({
+      success: true,
+      questions,
+      pagination: {
+        current: parseInt(page),
+        pages: Math.ceil(total / limit),
+        total
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch quiz questions',
+      error: error.message
+    });
+  }
+};
+
+// Update quiz question
+exports.updateQuizQuestion = async (req, res) => {
+  try {
+    const { questionId } = req.params;
+    const updateData = req.body;
+
+    const question = await Question.findByIdAndUpdate(
+      questionId,
+      updateData,
+      { new: true, runValidators: true }
+    );
+
+    if (!question) {
+      return res.status(404).json({
+        success: false,
+        message: 'Quiz question not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Quiz question updated successfully',
+      question
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update quiz question',
+      error: error.message
+    });
+  }
+};
+
+// Delete quiz question
+exports.deleteQuizQuestion = async (req, res) => {
+  try {
+    const { questionId } = req.params;
+
+    const question = await Question.findByIdAndDelete(questionId);
+
+    if (!question) {
+      return res.status(404).json({
+        success: false,
+        message: 'Quiz question not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Quiz question deleted successfully'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete quiz question',
+      error: error.message
+    });
+  }
+};
+
+// Send announcement to all users
+exports.sendAnnouncement = async (req, res) => {
+  try {
+    const { title, body, type = 'system', priority = 'medium', imageUrl, actionUrl } = req.body;
+
+    // Get all active users
+    const users = await User.find({ isActive: true }).select('_id fcmToken');
+
+    // Create notifications for all users
+    const notifications = users.map(user => ({
+      userId: user._id,
+      title,
+      body,
+      type,
+      priority,
+      imageUrl,
+      actionUrl,
+      isRead: false
+    }));
+
+    await Notification.insertMany(notifications);
+
+    // Send push notifications to users with FCM tokens
+    const usersWithTokens = users.filter(user => user.fcmToken);
+    const pushPromises = usersWithTokens.map(user => 
+      sendFCMNotification(user.fcmToken, title, body, { type, actionUrl })
+    );
+
+    await Promise.allSettled(pushPromises);
+
+    res.json({
+      success: true,
+      message: `Announcement sent to ${users.length} users`,
+      sentTo: users.length
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to send announcement',
+      error: error.message
+    });
+  }
+};
+
+// Send targeted notification
+exports.sendTargetedNotification = async (req, res) => {
+  try {
+    const { userIds, title, body, type = 'system', priority = 'medium', imageUrl, actionUrl } = req.body;
+
+    // Validate userIds
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'User IDs array is required'
+      });
+    }
+
+    // Get target users
+    const users = await User.find({ 
+      _id: { $in: userIds }, 
+      isActive: true 
+    }).select('_id fcmToken');
+
+    // Create notifications
+    const notifications = users.map(user => ({
+      userId: user._id,
+      title,
+      body,
+      type,
+      priority,
+      imageUrl,
+      actionUrl,
+      isRead: false
+    }));
+
+    await Notification.insertMany(notifications);
+
+    // Send push notifications
+    const usersWithTokens = users.filter(user => user.fcmToken);
+    const pushPromises = usersWithTokens.map(user => 
+      sendFCMNotification(user.fcmToken, title, body, { type, actionUrl })
+    );
+
+    await Promise.allSettled(pushPromises);
+
+    res.json({
+      success: true,
+      message: `Notification sent to ${users.length} users`,
+      sentTo: users.length
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to send targeted notification',
+      error: error.message
+    });
+  }
+};
+
+// Get notification analytics
+exports.getNotificationAnalytics = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    
+    const dateFilter = {};
+    if (startDate && endDate) {
+      dateFilter.createdAt = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate)
+      };
+    }
+
+    const analytics = await Notification.aggregate([
+      { $match: dateFilter },
+      {
+        $group: {
+          _id: {
+            type: '$type',
+            date: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }
+          },
+          total: { $sum: 1 },
+          read: { $sum: { $cond: ['$isRead', 1, 0] } },
+          unread: { $sum: { $cond: ['$isRead', 0, 1] } }
+        }
+      },
+      {
+        $group: {
+          _id: '$_id.type',
+          dailyStats: {
+            $push: {
+              date: '$_id.date',
+              total: '$total',
+              read: '$read',
+              unread: '$unread'
+            }
+          },
+          totalNotifications: { $sum: '$total' },
+          totalRead: { $sum: '$read' },
+          totalUnread: { $sum: '$unread' }
+        }
+      }
+    ]);
+
+    res.json({
+      success: true,
+      analytics
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch notification analytics',
+      error: error.message
+    });
+  }
+};
