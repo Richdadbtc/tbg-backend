@@ -265,6 +265,15 @@ exports.verifyOTP = async (req, res) => {
     user.isVerified = true;
     await user.save();
 
+    // Send welcome email after successful verification
+    try {
+      await sendWelcomeEmail(user);
+      console.log('Welcome email sent to:', user.email);
+    } catch (emailError) {
+      console.error('Failed to send welcome email:', emailError);
+      // Don't fail the registration if welcome email fails
+    }
+
     // Generate token
     const token = generateToken(user._id);
 
@@ -458,6 +467,7 @@ exports.googleSignIn = async (req, res) => {
 
     // Check if user exists
     let user = await User.findOne({ email });
+    let isNewUser = false;
     
     if (user) {
       // User exists, update Google ID if not set
@@ -469,6 +479,7 @@ exports.googleSignIn = async (req, res) => {
       }
     } else {
       // Create new user
+      isNewUser = true;
       user = new User({
         email,
         name,
@@ -481,6 +492,15 @@ exports.googleSignIn = async (req, res) => {
       // Generate referral code
       user.generateReferralCode();
       await user.save();
+
+      // Send welcome email for new Google users
+      try {
+        await sendWelcomeEmail(user);
+        console.log('Welcome email sent to new Google user:', user.email);
+      } catch (emailError) {
+        console.error('Failed to send welcome email to Google user:', emailError);
+        // Don't fail the sign-in if welcome email fails
+      }
     }
 
     // Update last login

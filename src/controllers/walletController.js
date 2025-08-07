@@ -3,8 +3,6 @@ const Transaction = require('../models/Transaction');
 const { initiatePaystackTransfer } = require('../services/paymentService');
 const { sendNotification } = require('../services/notificationService');
 
-// Remove the duplicate getWalletBalance function here
-// Keep only the one at the end of the file
 
 // Get transaction history
 exports.getTransactionHistory = async (req, res) => {

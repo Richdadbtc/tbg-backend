@@ -50,6 +50,13 @@ exports.submitQuizResult = async (req, res) => {
       total_time_seconds
     } = req.body;
 
+    // Server-side validation: Recalculate earnings based on correct answers
+    const bonusMultiplier = Math.floor(correct_answers / 5);
+    const serverCalculatedEarnings = bonusMultiplier * 5000;
+    
+    // Use server-calculated earnings for security
+    const finalEarnings = serverCalculatedEarnings;
+
     // Create quiz result
     const quizResult = new QuizResult({
       userId: req.user._id,
@@ -64,7 +71,7 @@ exports.submitQuizResult = async (req, res) => {
       })),
       correctAnswers: correct_answers,
       totalQuestions: questions.length,
-      totalEarnings: total_earnings,
+      totalEarnings: finalEarnings,
       totalPoints: total_points,
       startTime: new Date(start_time),
       endTime: new Date(end_time),
@@ -73,10 +80,10 @@ exports.submitQuizResult = async (req, res) => {
 
     await quizResult.save();
 
-    // Update user earnings and points
+    // Update user TBG coins and points (changed from earnings to tbgCoins)
     await User.findByIdAndUpdate(req.user._id, {
       $inc: {
-        earnings: total_earnings,
+        tbgCoins: finalEarnings, // Changed from earnings to tbgCoins
         points: total_points
       }
     });
@@ -84,7 +91,8 @@ exports.submitQuizResult = async (req, res) => {
     res.json({
       success: true,
       message: 'Quiz result submitted successfully',
-      result: quizResult
+      result: quizResult,
+      actualEarnings: finalEarnings
     });
   } catch (error) {
     res.status(500).json({
